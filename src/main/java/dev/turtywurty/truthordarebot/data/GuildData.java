@@ -13,6 +13,7 @@ public class GuildData implements JsonSerializable {
     public static final GuildData NO_DATA = new GuildData(-1L);
 
     private final long guildId;
+    private final GuildConfig config = new GuildConfig();
     private final List<String> usedTruths = new ArrayList<>();
     private final List<String> usedDares = new ArrayList<>();
     private final List<TODPack> packs = new ArrayList<>();
@@ -87,6 +88,10 @@ public class GuildData implements JsonSerializable {
         return this.guildId;
     }
 
+    public GuildConfig getConfig() {
+        return this.config;
+    }
+
     public boolean isNoData() {
         return this == NO_DATA;
     }
@@ -128,6 +133,7 @@ public class GuildData implements JsonSerializable {
         });
         json.add("Packs", packs);
 
+        json.add("Config", this.config.toJson());
         json.addProperty("CurrentPack", this.currentPack.getName());
 
         return json;
@@ -156,6 +162,8 @@ public class GuildData implements JsonSerializable {
             newPack.fromJson(pack);
             this.packs.add(newPack);
         });
+
+        this.config.fromJson(jsonObject.get("Config"));
 
         Optional<TODPack> foundOpt = this.packs.stream()
                 .filter(pack -> pack.getName().equals(jsonObject.get("CurrentPack").getAsString()))

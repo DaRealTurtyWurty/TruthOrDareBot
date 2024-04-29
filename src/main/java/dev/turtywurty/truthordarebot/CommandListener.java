@@ -1,10 +1,15 @@
 package dev.turtywurty.truthordarebot;
 
-import com.google.gson.JsonElement;
+import dev.turtywurty.truthordarebot.data.GuildConfig;
 import dev.turtywurty.truthordarebot.data.GuildData;
 import dev.turtywurty.truthordarebot.data.QuestionType;
 import dev.turtywurty.truthordarebot.data.TODPack;
 import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
+import net.dv8tion.jda.api.entities.channel.unions.GuildChannelUnion;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
@@ -13,10 +18,6 @@ import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -27,54 +28,6 @@ public class CommandListener extends ListenerAdapter {
             Button.primary("dare", "Dare"),
             Button.primary("random", "Random")
     );
-
-    private static GuildData getGuildData(long guildId) {
-        if (guildId == -1L) {
-            return GuildData.NO_DATA;
-        }
-
-        try {
-            Path path = Path.of("data", guildId + ".json");
-            Files.createDirectories(path.getParent());
-            var data = new GuildData(guildId);
-            if (Files.notExists(path)) {
-                Files.writeString(path, TruthOrDareBot.GSON.toJson(data.toJson()), StandardCharsets.UTF_8);
-            } else {
-                data.fromJson(TruthOrDareBot.GSON.fromJson(Files.readString(path), JsonElement.class));
-            }
-
-            return data;
-        } catch (IOException exception) {
-            TruthOrDareBot.LOGGER.error("Failed to get GuildData for guild with ID: {}", guildId, exception);
-            return GuildData.NO_DATA;
-        }
-    }
-
-    private static GuildData.Response getTruthOrDare(long guildId, QuestionType type) {
-        GuildData data = getGuildData(guildId);
-        GuildData.Response response = data.getResponse(type);
-        if (data.isNoData() || response.id() == null)
-            return response;
-
-        switch (response.type()) {
-            case TRUTH -> data.getUsedTruths().add(response.id());
-            case DARE -> data.getUsedDares().add(response.id());
-            default -> throw new UnsupportedOperationException("Unknown QuestionType: " + response.type());
-        }
-
-        updateGuildData(data);
-
-        return response;
-    }
-
-    private static void updateGuildData(GuildData data) {
-        try {
-            Path path = Path.of("data", data.getGuildId() + ".json");
-            Files.writeString(path, TruthOrDareBot.GSON.toJson(data.toJson()), StandardCharsets.UTF_8);
-        } catch (IOException exception) {
-            TruthOrDareBot.LOGGER.error("Failed to save GuildData for guild with ID: {}", data.getGuildId(), exception);
-        }
-    }
 
     @Override
     public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
@@ -87,7 +40,7 @@ public class CommandListener extends ListenerAdapter {
                     default -> QuestionType.RANDOM;
                 };
 
-                GuildData.Response response = getTruthOrDare(isGuild ? event.getGuild().getIdLong() : -1L, type);
+                GuildData.Response response = DataHandler.getTruthOrDare(isGuild ? event.getGuild().getIdLong() : -1L, type);
                 if (response.id() == null) {
                     event.reply("❌ No " + response.type().getName().toLowerCase(Locale.ROOT) + "s found!").setEphemeral(true).queue();
                     return;
@@ -123,10 +76,10 @@ public class CommandListener extends ListenerAdapter {
                             return;
                         }
 
-                        GuildData data = getGuildData(event.getGuild().getIdLong());
+                        GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
                         if (data.usePack(packName)) {
                             event.reply("✅ Successfully set pack to: " + packName).queue();
-                            updateGuildData(data);
+                            DataHandler.saveGuildData(data);
                         } else {
                             event.reply("❌ Pack does not exist: " + packName).setEphemeral(true).queue();
                         }
@@ -139,10 +92,10 @@ public class CommandListener extends ListenerAdapter {
                         }
 
                         String description = event.getOption("description", "", OptionMapping::getAsString);
-                        GuildData data = getGuildData(event.getGuild().getIdLong());
+                        GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
                         if (data.addPack(new TODPack(packName, description))) {
                             event.reply("✅ Successfully added pack: " + packName).queue();
-                            updateGuildData(data);
+                            DataHandler.saveGuildData(data);
                         } else {
                             event.reply("❌ Pack already exists: " + packName).setEphemeral(true).queue();
                         }
@@ -159,16 +112,16 @@ public class CommandListener extends ListenerAdapter {
                             return;
                         }
 
-                        GuildData data = getGuildData(event.getGuild().getIdLong());
+                        GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
                         if (data.removePack(packName)) {
                             event.reply("✅ Successfully removed pack: " + packName).queue();
-                            updateGuildData(data);
+                            DataHandler.saveGuildData(data);
                         } else {
                             event.reply("❌ Pack does not exist: " + packName).setEphemeral(true).queue();
                         }
                     }
                     case "list" -> {
-                        GuildData data = getGuildData(event.getGuild().getIdLong());
+                        GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
                         List<TODPack> packs = data.getPacks();
                         var embed = new EmbedBuilder()
                                 .setTitle("Packs")
@@ -217,7 +170,7 @@ public class CommandListener extends ListenerAdapter {
                     return;
                 }
 
-                GuildData data = getGuildData(event.getGuild().getIdLong());
+                GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
                 TODPack pack = data.getPack(packName);
                 if (pack == null) {
                     event.reply("❌ Pack does not exist: " + packName).setEphemeral(true).queue();
@@ -290,8 +243,338 @@ public class CommandListener extends ListenerAdapter {
                 }
 
                 if (updated) {
-                    updateGuildData(data);
+                    DataHandler.saveGuildData(data);
                 }
+            }
+            case "add-config" -> {
+                Member member = event.getMember();
+                if (!isGuild || member == null) {
+                    event.reply("❌ This command can only be used in a server!").setEphemeral(true).queue();
+                    return;
+                }
+
+                if (!member.hasPermission(Permission.MANAGE_SERVER)) {
+                    event.reply("❌ You need the `MANAGE_SERVER` permission to use this command!").setEphemeral(true).queue();
+                    return;
+                }
+
+                String subcommand = event.getSubcommandName();
+                if (subcommand == null) {
+                    event.reply("❌ You must specify a subcommand!").setEphemeral(true).queue();
+                    return;
+                }
+
+                GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
+                GuildConfig config = data.getConfig();
+                boolean updated = false;
+                switch (subcommand) {
+                    case "whitelist-channel" -> {
+                        GuildChannelUnion channel = event.getOption("channel", null, OptionMapping::getAsChannel);
+                        if (channel == null) {
+                            event.reply("❌ You must specify a channel!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!channel.getType().isMessage()) {
+                            event.reply("❌ You cannot whitelist a category or voice channel!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        GuildMessageChannel messageChannel = channel.asGuildMessageChannel();
+                        if (!messageChannel.canTalk(member) || !member.hasPermission(Permission.MANAGE_SERVER)) {
+                            event.reply("❌ You do not have permission to whitelist this channel!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (config.getWhitelistedChannels().contains(channel.getIdLong())) {
+                            event.reply("❌ Channel is already whitelisted!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        config.removeBlacklistedChannel(channel.getIdLong());
+                        config.addWhitelistedChannel(channel.getIdLong());
+
+                        event.reply("✅ Successfully whitelisted channel: " + channel.getAsMention()).queue();
+
+                        updated = true;
+                    }
+                    case "blacklist-channel" -> {
+                        GuildChannelUnion channel = event.getOption("channel", null, OptionMapping::getAsChannel);
+                        if (channel == null) {
+                            event.reply("❌ You must specify a channel!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!channel.getType().isMessage()) {
+                            event.reply("❌ You cannot blacklist a category or voice channel!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        GuildMessageChannel messageChannel = channel.asGuildMessageChannel();
+                        if (!messageChannel.canTalk(member) || !member.hasPermission(Permission.MANAGE_SERVER)) {
+                            event.reply("❌ You do not have permission to blacklist this channel!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (config.getBlacklistedChannels().contains(channel.getIdLong())) {
+                            event.reply("❌ Channel is already blacklisted!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        config.removeWhitelistedChannel(channel.getIdLong());
+                        config.addBlacklistedChannel(channel.getIdLong());
+
+                        event.reply("✅ Successfully blacklisted channel: " + channel.getAsMention()).queue();
+
+                        updated = true;
+                    }
+                    case "whitelist-role" -> {
+                        Role role = event.getOption("role", null, OptionMapping::getAsRole);
+                        if (role == null) {
+                            event.reply("❌ You must specify a role!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!member.canInteract(role) || !member.hasPermission(Permission.MANAGE_SERVER)) {
+                            event.reply("❌ You do not have permission to whitelist this role!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (role.isPublicRole()) {
+                            event.reply("❌ You cannot whitelist the public role!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (config.getWhitelistedRoles().contains(role.getIdLong())) {
+                            event.reply("❌ Role is already whitelisted!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        config.removeBlacklistedChannel(role.getIdLong());
+                        config.addWhitelistedChannel(role.getIdLong());
+
+                        event.reply("✅ Successfully whitelisted role: " + role.getAsMention()).setAllowedMentions(List.of()).queue();
+
+                        updated = true;
+                    }
+                    case "blacklist-role" -> {
+                        Role role = event.getOption("role", null, OptionMapping::getAsRole);
+                        if (role == null) {
+                            event.reply("❌ You must specify a role!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!member.canInteract(role) || !member.hasPermission(Permission.MANAGE_SERVER)) {
+                            event.reply("❌ You do not have permission to blacklist this role!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (role.isPublicRole()) {
+                            event.reply("❌ You cannot blacklist the public role!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (config.getBlacklistedRoles().contains(role.getIdLong())) {
+                            event.reply("❌ Role is already blacklisted!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        config.removeWhitelistedRole(role.getIdLong());
+                        config.addBlacklistedRole(role.getIdLong());
+
+                        event.reply("✅ Successfully blacklisted role: " + role.getAsMention()).setAllowedMentions(List.of()).queue();
+
+                        updated = true;
+                    }
+                }
+
+                if (updated)
+                    DataHandler.saveGuildData(data);
+            }
+            case "remove-config" -> {
+                Member member = event.getMember();
+                if (!isGuild || member == null) {
+                    event.reply("❌ This command can only be used in a server!").setEphemeral(true).queue();
+                    return;
+                }
+
+                if (!member.hasPermission(Permission.MANAGE_SERVER)) {
+                    event.reply("❌ You need the `MANAGE_SERVER` permission to use this command!").setEphemeral(true).queue();
+                    return;
+                }
+
+                GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
+                GuildConfig config = data.getConfig();
+
+                String subcommand = event.getSubcommandName();
+                if (subcommand == null) {
+                    event.reply("❌ You must specify a subcommand!").setEphemeral(true).queue();
+                    return;
+                }
+
+                boolean updated = false;
+                switch (subcommand) {
+                    case "whitelist-channel" -> {
+                        GuildChannelUnion channel = event.getOption("channel", null, OptionMapping::getAsChannel);
+                        if (channel == null) {
+                            event.reply("❌ You must specify a channel!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!channel.getType().isMessage()) {
+                            event.reply("❌ You cannot whitelist a category or voice channel!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!config.getWhitelistedChannels().contains(channel.getIdLong())) {
+                            event.reply("❌ Channel is not whitelisted!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        config.removeWhitelistedChannel(channel.getIdLong());
+                        event.reply("✅ Successfully removed channel from whitelist: " + channel.getAsMention()).queue();
+
+                        updated = true;
+                    }
+                    case "blacklist-channel" -> {
+                        GuildChannelUnion channel = event.getOption("channel", null, OptionMapping::getAsChannel);
+                        if (channel == null) {
+                            event.reply("❌ You must specify a channel!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!channel.getType().isMessage()) {
+                            event.reply("❌ You cannot blacklist a category or voice channel!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!config.getBlacklistedChannels().contains(channel.getIdLong())) {
+                            event.reply("❌ Channel is not blacklisted!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        config.removeBlacklistedChannel(channel.getIdLong());
+                        event.reply("✅ Successfully removed channel from blacklist: " + channel.getAsMention()).queue();
+
+                        updated = true;
+                    }
+                    case "whitelist-role" -> {
+                        Role role = event.getOption("role", null, OptionMapping::getAsRole);
+                        if (role == null) {
+                            event.reply("❌ You must specify a role!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!config.getWhitelistedRoles().contains(role.getIdLong())) {
+                            event.reply("❌ Role is not whitelisted!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        config.removeWhitelistedRole(role.getIdLong());
+                        event.reply("✅ Successfully removed role from whitelist: " + role.getAsMention()).setAllowedMentions(List.of()).queue();
+
+                        updated = true;
+                    }
+                    case "blacklist-role" -> {
+                        Role role = event.getOption("role", null, OptionMapping::getAsRole);
+                        if (role == null) {
+                            event.reply("❌ You must specify a role!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!config.getBlacklistedRoles().contains(role.getIdLong())) {
+                            event.reply("❌ Role is not blacklisted!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        config.removeBlacklistedRole(role.getIdLong());
+                        event.reply("✅ Successfully removed role from blacklist: " + role.getAsMention()).setAllowedMentions(List.of()).queue();
+
+                        updated = true;
+                    }
+                }
+
+                if (updated)
+                    DataHandler.saveGuildData(data);
+            }
+            case "reset-config" -> {
+                if (!isGuild) {
+                    event.reply("❌ This command can only be used in a server!").setEphemeral(true).queue();
+                    return;
+                }
+
+                if (!event.getMember().hasPermission(Permission.MANAGE_SERVER)) {
+                    event.reply("❌ You need the `MANAGE_SERVER` permission to use this command!").setEphemeral(true).queue();
+                    return;
+                }
+
+                GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
+                GuildConfig config = data.getConfig();
+
+                ResetType type = switch (event.getOption("type", null, OptionMapping::getAsString)) {
+                    case "channel_whitelist" -> ResetType.CHANNEL_WHITELIST;
+                    case "channel_blacklist" -> ResetType.CHANNEL_BLACKLIST;
+                    case "role_whitelist" -> ResetType.ROLE_WHITELIST;
+                    case "role_blacklist" -> ResetType.ROLE_BLACKLIST;
+                    case null, default -> ResetType.ALL;
+                };
+
+                config.reset(type);
+                event.reply("✅ Successfully reset configuration!").queue();
+                DataHandler.saveGuildData(data);
+            }
+            case "get-config" -> {
+                if (!isGuild) {
+                    event.reply("❌ This command can only be used in a server!").setEphemeral(true).queue();
+                    return;
+                }
+
+                if (!event.getMember().hasPermission(Permission.MANAGE_SERVER)) {
+                    event.reply("❌ You need the `MANAGE_SERVER` permission to use this command!").setEphemeral(true).queue();
+                    return;
+                }
+
+                GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
+                GuildConfig config = data.getConfig();
+                var embed = new EmbedBuilder()
+                        .setTitle("Configuration")
+                        .addField("Whitelisted Channels", config.getWhitelistedChannelsAsString(), false)
+                        .addField("Blacklisted Channels", config.getBlacklistedChannelsAsString(), false)
+                        .addField("Whitelisted Roles", config.getWhitelistedRolesAsString(), false)
+                        .addField("Blacklisted Roles", config.getBlacklistedRolesAsString(), false)
+                        .setFooter("Requested by: " + event.getUser().getEffectiveName(), event.getUser().getEffectiveAvatarUrl())
+                        .setTimestamp(Instant.now())
+                        .setColor(0x00FF00);
+
+                event.replyEmbeds(embed.build()).queue();
+            }
+            case "help" -> {
+                var embed = new EmbedBuilder()
+                        .setTitle("Help")
+                        .setDescription("This bot is used to play Truth or Dare!")
+                        .addField("Commands", """
+                                `/truth` - Get a random truth
+                                `/dare` - Get a random dare
+                                `/random` - Get a random truth or dare
+                                `/pack` - Manage packs
+                                `/edit-pack` - Edit a pack
+                                `/add-config` - Add to the bot's configuration (whitelist/blacklist channels/roles)
+                                `/remove-config` - Remove from the bot's configuration (whitelist/blacklist channels/roles)
+                                `/reset-config` - Reset the bot's configuration (all/whitelist/blacklist channels/roles)
+                                `/get-config` - Get the bot's current configuration
+                                `/help` - Get this help message
+                                """, false)
+                        .addField("Buttons", """
+                                `Truth` - Get a random truth
+                                `Dare` - Get a random dare
+                                `Random` - Get a random truth or dare
+                                """, false)
+                        .setFooter("Requested by: " + event.getUser().getEffectiveName(), event.getUser().getEffectiveAvatarUrl())
+                        .setTimestamp(Instant.now())
+                        .setColor(0x00FF00)
+                        .build();
+
+                event.replyEmbeds(embed).queue();
             }
         }
     }
@@ -308,7 +591,7 @@ public class CommandListener extends ListenerAdapter {
                     default -> QuestionType.RANDOM;
                 };
 
-                GuildData.Response response = getTruthOrDare(event.getGuild().getIdLong(), type);
+                GuildData.Response response = DataHandler.getTruthOrDare(event.getGuild().getIdLong(), type);
                 if (response.id() == null) {
                     event.getHook().sendMessage("❌ No " + response.type().getName().toLowerCase(Locale.ROOT) + "s found!").setEphemeral(true).queue();
                     return;
@@ -341,7 +624,7 @@ public class CommandListener extends ListenerAdapter {
         }
 
         if ("pack".equals(event.getName()) && event.getFocusedOption().getName().equals("name")) {
-            GuildData data = getGuildData(event.getGuild().getIdLong());
+            GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
             List<TODPack> packs = data.getPacks();
             if ("remove".equals(subcommand))
                 event.replyChoiceStrings(packs.stream()
@@ -358,7 +641,7 @@ public class CommandListener extends ListenerAdapter {
                 ).queue();
         } else if ("edit-pack".equals(event.getName())) {
             if (event.getFocusedOption().getName().equals("name")) {
-                GuildData data = getGuildData(event.getGuild().getIdLong());
+                GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
                 List<TODPack> packs = data.getPacks();
                 event.replyChoiceStrings(packs.stream().filter(TODPack::isCustom).map(TODPack::getName).limit(25).toList()).queue();
             } else if (event.getFocusedOption().getName().equals("id")) {
@@ -368,7 +651,7 @@ public class CommandListener extends ListenerAdapter {
                     return;
                 }
 
-                GuildData data = getGuildData(event.getGuild().getIdLong());
+                GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
                 TODPack pack = data.getPack(packName);
                 if (pack == null) {
                     event.replyChoices().queue();
@@ -383,6 +666,24 @@ public class CommandListener extends ListenerAdapter {
 
                 event.replyChoiceStrings(ids).queue();
             }
+        }
+    }
+
+    public enum ResetType {
+        ALL("all"),
+        CHANNEL_WHITELIST("channel_whitelist"),
+        CHANNEL_BLACKLIST("channel_blacklist"),
+        ROLE_WHITELIST("role_whitelist"),
+        ROLE_BLACKLIST("role_blacklist");
+
+        private final String name;
+
+        ResetType(String name) {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
         }
     }
 }
