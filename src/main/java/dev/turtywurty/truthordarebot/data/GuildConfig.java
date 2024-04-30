@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import dev.turtywurty.truthordarebot.CommandListener;
+import net.dv8tion.jda.api.entities.Member;
+import net.dv8tion.jda.api.entities.Role;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -139,5 +141,16 @@ public class GuildConfig implements JsonSerializable {
                 reset(CommandListener.ResetType.ROLE_BLACKLIST);
             }
         }
+    }
+
+    public boolean isMemberAllowed(Member member) {
+        // Index 0 is highest role, we want to go from highest to lowest
+        for (Role role : member.getRoles()) {
+            if (isRoleAllowed(role.getIdLong())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

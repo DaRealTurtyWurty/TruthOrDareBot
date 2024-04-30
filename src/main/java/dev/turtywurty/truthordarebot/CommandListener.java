@@ -19,6 +19,7 @@ import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -40,6 +41,20 @@ public class CommandListener extends ListenerAdapter {
                     default -> QuestionType.RANDOM;
                 };
 
+                if(isGuild) {
+                    GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
+                    GuildConfig config = data.getConfig();
+                    if(!config.isMemberAllowed(event.getMember())) {
+                        event.reply("❌ You are not allowed to use this command!").setEphemeral(true).queue();
+                        return;
+                    }
+
+                    if (!config.isChannelAllowed(event.getChannel().getIdLong())) {
+                        event.reply("❌ You are not allowed to use this command in this channel!").setEphemeral(true).queue();
+                        return;
+                    }
+                }
+
                 GuildData.Response response = DataHandler.getTruthOrDare(isGuild ? event.getGuild().getIdLong() : -1L, type);
                 if (response.id() == null) {
                     event.reply("❌ No " + response.type().getName().toLowerCase(Locale.ROOT) + "s found!").setEphemeral(true).queue();
@@ -51,13 +66,14 @@ public class CommandListener extends ListenerAdapter {
                         .setDescription("ID: " + response.id())
                         .setFooter("Requested by: " + event.getUser().getEffectiveName(), event.getUser().getEffectiveAvatarUrl())
                         .setTimestamp(Instant.now())
-                        .setColor(0x00FF00)
+                        .setColor(response.type() == QuestionType.TRUTH ? 0x0000FF : 0xFF0000)
                         .build();
 
                 event.replyEmbeds(embed).addActionRow(BUTTONS).queue();
             }
             case "pack" -> {
-                if (!isGuild) {
+                Member member = event.getMember();
+                if (!isGuild || member == null) {
                     event.reply("❌ This command can only be used in a server!").setEphemeral(true).queue();
                     return;
                 }
@@ -68,7 +84,50 @@ public class CommandListener extends ListenerAdapter {
                     return;
                 }
 
+                if (!member.hasPermission(Permission.MANAGE_SERVER) && !"list".equals(subcommand)) {
+                    event.reply("❌ You need the `MANAGE_SERVER` permission to use this command!").setEphemeral(true).queue();
+                    return;
+                }
+
                 switch (subcommand) {
+                    case "view" -> {
+                        String type = event.getOption("type", "truths", OptionMapping::getAsString);
+                        if (!type.equals("truths") && !type.equals("dares")) {
+                            event.reply("❌ You must specify a type (truths/dares)!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        String packName = event.getOption("name", null, OptionMapping::getAsString);
+                        if (packName == null) {
+                            event.reply("❌ You must specify a pack name!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (packName.equals(TODPack.DEFAULT.getName())) {
+                            event.reply("❌ You cannot view the default pack!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
+                        TODPack pack = data.getPack(packName);
+                        if (pack == null) {
+                            event.reply("❌ Pack does not exist: " + packName).setEphemeral(true).queue();
+                            return;
+                        }
+
+                        var embed = new EmbedBuilder()
+                                .setTitle(type.substring(0, 1).toUpperCase() + type.substring(1) + " for pack: " + pack.getName())
+                                .setDescription(pack.getDescription())
+                                .setFooter("Requested by: " + event.getUser().getEffectiveName(), event.getUser().getEffectiveAvatarUrl())
+                                .setTimestamp(Instant.now())
+                                .setColor(0x00FF00);
+
+                        List<String> items = type.equals("truths") ?
+                                new ArrayList<>(pack.getTruthMap().values()) :
+                                new ArrayList<>(pack.getDareMap().values());
+                        var paginatableEmbed = new PaginatableEmbed(event.getJDA(), 10, embed, items.toArray(new String[0]));
+                        paginatableEmbed.respondToEvent(event);
+                    }
                     case "use" -> {
                         String packName = event.getOption("name", null, OptionMapping::getAsString);
                         if (packName == null) {
@@ -148,8 +207,14 @@ public class CommandListener extends ListenerAdapter {
                 }
             }
             case "edit-pack" -> {
-                if (!isGuild) {
+                Member member = event.getMember();
+                if (!isGuild || member == null) {
                     event.reply("❌ This command can only be used in a server!").setEphemeral(true).queue();
+                    return;
+                }
+
+                if (!member.hasPermission(Permission.MANAGE_SERVER)) {
+                    event.reply("❌ You need the `MANAGE_SERVER` permission to use this command!").setEphemeral(true).queue();
                     return;
                 }
 
@@ -281,7 +346,7 @@ public class CommandListener extends ListenerAdapter {
                         }
 
                         GuildMessageChannel messageChannel = channel.asGuildMessageChannel();
-                        if (!messageChannel.canTalk(member) || !member.hasPermission(Permission.MANAGE_SERVER)) {
+                        if (!messageChannel.canTalk(member)) {
                             event.reply("❌ You do not have permission to whitelist this channel!").setEphemeral(true).queue();
                             return;
                         }
@@ -311,7 +376,7 @@ public class CommandListener extends ListenerAdapter {
                         }
 
                         GuildMessageChannel messageChannel = channel.asGuildMessageChannel();
-                        if (!messageChannel.canTalk(member) || !member.hasPermission(Permission.MANAGE_SERVER)) {
+                        if (!messageChannel.canTalk(member)) {
                             event.reply("❌ You do not have permission to blacklist this channel!").setEphemeral(true).queue();
                             return;
                         }
@@ -335,7 +400,7 @@ public class CommandListener extends ListenerAdapter {
                             return;
                         }
 
-                        if (!member.canInteract(role) || !member.hasPermission(Permission.MANAGE_SERVER)) {
+                        if (!member.canInteract(role)) {
                             event.reply("❌ You do not have permission to whitelist this role!").setEphemeral(true).queue();
                             return;
                         }
@@ -364,7 +429,7 @@ public class CommandListener extends ListenerAdapter {
                             return;
                         }
 
-                        if (!member.canInteract(role) || !member.hasPermission(Permission.MANAGE_SERVER)) {
+                        if (!member.canInteract(role)) {
                             event.reply("❌ You do not have permission to blacklist this role!").setEphemeral(true).queue();
                             return;
                         }
@@ -426,6 +491,11 @@ public class CommandListener extends ListenerAdapter {
                             return;
                         }
 
+                        if (!channel.asGuildMessageChannel().canTalk(member)) {
+                            event.reply("❌ You do not have permission to remove this channel from the whitelist!").setEphemeral(true).queue();
+                            return;
+                        }
+
                         if (!config.getWhitelistedChannels().contains(channel.getIdLong())) {
                             event.reply("❌ Channel is not whitelisted!").setEphemeral(true).queue();
                             return;
@@ -448,6 +518,11 @@ public class CommandListener extends ListenerAdapter {
                             return;
                         }
 
+                        if (!channel.asGuildMessageChannel().canTalk(member)) {
+                            event.reply("❌ You do not have permission to remove this channel from the blacklist!").setEphemeral(true).queue();
+                            return;
+                        }
+
                         if (!config.getBlacklistedChannels().contains(channel.getIdLong())) {
                             event.reply("❌ Channel is not blacklisted!").setEphemeral(true).queue();
                             return;
@@ -465,6 +540,11 @@ public class CommandListener extends ListenerAdapter {
                             return;
                         }
 
+                        if (!member.canInteract(role)) {
+                            event.reply("❌ You do not have permission to remove this role from the whitelist!").setEphemeral(true).queue();
+                            return;
+                        }
+
                         if (!config.getWhitelistedRoles().contains(role.getIdLong())) {
                             event.reply("❌ Role is not whitelisted!").setEphemeral(true).queue();
                             return;
@@ -479,6 +559,11 @@ public class CommandListener extends ListenerAdapter {
                         Role role = event.getOption("role", null, OptionMapping::getAsRole);
                         if (role == null) {
                             event.reply("❌ You must specify a role!").setEphemeral(true).queue();
+                            return;
+                        }
+
+                        if (!member.canInteract(role)) {
+                            event.reply("❌ You do not have permission to remove this role from the blacklist!").setEphemeral(true).queue();
                             return;
                         }
 
@@ -602,7 +687,7 @@ public class CommandListener extends ListenerAdapter {
                         .setDescription("ID: " + response.id())
                         .setFooter("Requested by: " + event.getUser().getEffectiveName(), event.getUser().getEffectiveAvatarUrl())
                         .setTimestamp(Instant.now())
-                        .setColor(0x00FF00)
+                        .setColor(response.type() == QuestionType.TRUTH ? 0x0000FF : 0xFF0000)
                         .build();
 
                 event.getHook().sendMessageEmbeds(embed).addActionRow(BUTTONS).queue();
@@ -626,7 +711,7 @@ public class CommandListener extends ListenerAdapter {
         if ("pack".equals(event.getName()) && event.getFocusedOption().getName().equals("name")) {
             GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
             List<TODPack> packs = data.getPacks();
-            if ("remove".equals(subcommand))
+            if ("remove".equals(subcommand) || "view".equals(subcommand))
                 event.replyChoiceStrings(packs.stream()
                         .filter(TODPack::isCustom)
                         .map(TODPack::getName)

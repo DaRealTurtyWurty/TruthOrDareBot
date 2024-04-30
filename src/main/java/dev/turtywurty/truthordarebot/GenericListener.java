@@ -15,7 +15,12 @@ public class GenericListener extends ListenerAdapter {
     @Override
     public void onGuildReady(GuildReadyEvent event) {
         event.getGuild().updateCommands().addCommands(
-                Commands.slash("pack", "Use, add or remove a pack, or list all packs!").addSubcommands(
+                Commands.slash("pack", "View, use, add or remove a pack, or list all packs!").addSubcommands(
+                        new SubcommandData("view", "View a pack!")
+                                .addOptions(new OptionData(OptionType.STRING, "type", "Whether to view the truths or dares!", true)
+                                        .addChoice("Truths", "truths")
+                                        .addChoice("Dares", "dares"))
+                                .addOption(OptionType.STRING, "name", "The name of the pack!", true, true),
                         new SubcommandData("use", "Use a pack!")
                                 .addOption(OptionType.STRING, "name", "The name of the pack!", true, true),
                         new SubcommandData("add", "Add a pack!")
@@ -76,7 +81,7 @@ public class GenericListener extends ListenerAdapter {
         GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
         GuildConfig config = data.getConfig();
 
-        if(config.getWhitelistedChannels().isEmpty() && config.getBlacklistedChannels().isEmpty())
+        if (config.getWhitelistedChannels().isEmpty() && config.getBlacklistedChannels().isEmpty())
             return;
 
         boolean removed = false;
@@ -99,7 +104,7 @@ public class GenericListener extends ListenerAdapter {
         GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
         GuildConfig config = data.getConfig();
 
-        if(config.getWhitelistedRoles().isEmpty() && config.getBlacklistedRoles().isEmpty())
+        if (config.getWhitelistedRoles().isEmpty() && config.getBlacklistedRoles().isEmpty())
             return;
 
         boolean removed = false;
