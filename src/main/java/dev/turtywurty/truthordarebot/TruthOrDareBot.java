@@ -34,7 +34,7 @@ public class TruthOrDareBot {
 
         parser.addArgument("-env", "--environment")
                 .type(new PathArgumentType().verifyExists().verifyIsFile().verifyCanRead())
-                .setDefault(Path.of("./.env"))
+                .setDefault(Path.of(".env"))
                 .help("The path to the environment file.");
 
         Namespace namespace = parser.parseArgsOrFail(args);
