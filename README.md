@@ -11,7 +11,7 @@ A simple discord bot that allows you to play truth or dare with your friends.
    Replace `YOUR_CLIENT_ID` with the client id of your bot (or alternatively use the URL generator in the discord developer portal).
 7. Create a new file in the location of your jar file called `.env` and add the following line: `BOT_TOKEN=YOUR_BOT_TOKEN`. 
    Replace `YOUR_BOT_TOKEN` with the token you copied earlier.
-8. Run the jar file using the following command: `java -jar TruthOrDareBot-1.0.0.jar`.
+8. Run the jar file using the following command: `java -jar TruthOrDareBot-1.0.jar`.
 9. (Optional) Instead of having the `.env` file in the same directory as the jar file, you can also run the jar with the `-env` argument and specify the path to the `.env` file: `java -jar TruthOrDareBot-1.0.0.jar -env /path/to/.env`
 10. The bot should now be running and you can use the `/truth` and `/dare` commands in your server.
 
