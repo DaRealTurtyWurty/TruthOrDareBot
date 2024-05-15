@@ -1,7 +1,9 @@
 package dev.turtywurty.truthordarebot;
 
 import io.github.cdimascio.dotenv.Dotenv;
+import io.github.cdimascio.dotenv.DotenvBuilder;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -68,6 +70,11 @@ public class Environment {
         if(this.env != null)
             throw new IllegalStateException("Environment already loaded!");
 
-        this.env = Dotenv.configure().directory(environment.toString()).load();
+        DotenvBuilder builder = Dotenv.configure().directory(Files.isDirectory(environment) ? environment.toString() : environment.getParent().toString());
+        if(Files.exists(environment)) {
+            builder.filename(environment.getFileName().toString());
+        }
+
+        this.env = builder.load();
     }
 }
