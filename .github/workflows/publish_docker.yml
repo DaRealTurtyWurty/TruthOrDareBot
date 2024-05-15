@@ -43,3 +43,6 @@ jobs:
 
       - name: Push Docker image
         run: docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+    permissions:
+        contents: read
+        packages: write
