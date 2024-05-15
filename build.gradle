@@ -10,13 +10,6 @@ java {
     }
 }
 
-group = 'dev.turtywurty'
-version = '1.0'
-
-application {
-    mainClass = 'dev.turtywurty.truthordarebot.TruthOrDareBot'
-}
-
 repositories {
     mavenCentral()
 }
@@ -30,12 +23,16 @@ dependencies {
     implementation(group: 'com.google.code.gson', name: 'gson', version: '2.10.1')
 }
 
+application {
+    mainClass = 'dev.turtywurty.truthordarebot.TruthOrDareBot'
+}
+
 jar {
     manifest {
         attributes(
-                'Main-Class': 'dev.turtywurty.truthordarebot.TruthOrDareBot',
-                'Implementation-Title': 'TruthOrDareBot',
-                'Implementation-Version': version
+                "Implementation-Title": "TruthOrDareBot",
+                "Implementation-Version": "1.0-alpha",
+                "Main-Class": "dev.darealturtywurty.truthordarebot.TruthOrDareBot"
         )
     }
 }
