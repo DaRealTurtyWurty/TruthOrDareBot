@@ -41,7 +41,7 @@ public class CommandListener extends ListenerAdapter {
             }
         }
 
-        USER_COOLDOWNS.put(event.getUser().getIdLong(), System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(15));
+        USER_COOLDOWNS.put(event.getUser().getIdLong(), System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(2));
 
         boolean isGuild = event.isFromGuild();
         switch (event.getName()) {
@@ -685,7 +685,7 @@ public class CommandListener extends ListenerAdapter {
             }
         }
 
-        USER_COOLDOWNS.put(event.getUser().getIdLong(), System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(15));
+        USER_COOLDOWNS.put(event.getUser().getIdLong(), System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(2));
 
         event.deferEdit().queue();
 
