@@ -19,11 +19,12 @@ import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 public class CommandListener extends ListenerAdapter {
+    private static final Map<Long, Long> USER_COOLDOWNS = new HashMap<>();
+
     private static final List<Button> BUTTONS = List.of(
             Button.primary("truth", "Truth"),
             Button.primary("dare", "Dare"),
@@ -32,6 +33,16 @@ public class CommandListener extends ListenerAdapter {
 
     @Override
     public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
+        if (USER_COOLDOWNS.containsKey(event.getUser().getIdLong())) {
+            long cooldown = USER_COOLDOWNS.get(event.getUser().getIdLong());
+            if (System.currentTimeMillis() < cooldown) {
+                event.reply("❌ You are on cooldown!").setEphemeral(true).queue();
+                return;
+            }
+        }
+
+        USER_COOLDOWNS.put(event.getUser().getIdLong(), System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(15));
+
         boolean isGuild = event.isFromGuild();
         switch (event.getName()) {
             case "truth", "dare", "random" -> {
@@ -41,10 +52,10 @@ public class CommandListener extends ListenerAdapter {
                     default -> QuestionType.RANDOM;
                 };
 
-                if(isGuild) {
+                if (isGuild) {
                     GuildData data = DataHandler.getGuildData(event.getGuild().getIdLong());
                     GuildConfig config = data.getConfig();
-                    if(!config.isMemberAllowed(event.getMember())) {
+                    if (!config.isMemberAllowed(event.getMember())) {
                         event.reply("❌ You are not allowed to use this command!").setEphemeral(true).queue();
                         return;
                     }
@@ -666,6 +677,16 @@ public class CommandListener extends ListenerAdapter {
 
     @Override
     public void onButtonInteraction(@NotNull ButtonInteractionEvent event) {
+        if(USER_COOLDOWNS.containsKey(event.getUser().getIdLong())) {
+            long cooldown = USER_COOLDOWNS.get(event.getUser().getIdLong());
+            if(System.currentTimeMillis() < cooldown) {
+                event.reply("❌ You are on cooldown!").setEphemeral(true).queue();
+                return;
+            }
+        }
+
+        USER_COOLDOWNS.put(event.getUser().getIdLong(), System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(15));
+
         event.deferEdit().queue();
 
         switch (event.getComponentId()) {
